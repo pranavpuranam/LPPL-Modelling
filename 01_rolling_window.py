@@ -33,7 +33,6 @@ def generate_lppl_windows(
     dt_max=750,
     dt_step=25,
 ):
-    # All steps are in trading observations, not calendar days.
     df = df.copy()
     df[date_col] = pd.to_datetime(df[date_col])
     df = df.sort_values(date_col).reset_index(drop=True)
@@ -100,15 +99,16 @@ def fit_lppl_row(
     df,
     t1,
     t2,
+    global_tc_upper_date,
     date_col="Date",
     y_col="log_price",
     tc_min_days=1,
-    tc_max_days=365,
     seed=42,
     maxiter=5000,
 ):
     t1 = pd.to_datetime(t1)
     t2 = pd.to_datetime(t2)
+    global_tc_upper_date = pd.to_datetime(global_tc_upper_date)
 
     window = df[
         (df[date_col] >= t1) &
@@ -123,15 +123,21 @@ def fit_lppl_row(
     actual_t1 = window[date_col].iloc[0]
     actual_t2 = window[date_col].iloc[-1]
 
-    # Time measured in calendar days from actual_t1.
     window["t"] = (window[date_col] - actual_t1).dt.days.astype(float)
 
     t = window["t"].to_numpy(dtype=float)
     y = window[y_col].to_numpy(dtype=float)
 
     t_last = float(t.max())
+
     tc_lower = t_last + tc_min_days
-    tc_upper = t_last + tc_max_days
+    tc_upper = float((global_tc_upper_date - actual_t1).days)
+
+    if tc_upper <= tc_lower:
+        raise ValueError(
+            f"Invalid tc bounds: lower={tc_lower}, upper={tc_upper}. "
+            "Global upper date is not after this window's t2."
+        )
 
     def objective(theta):
         tc, m, omega = theta
@@ -180,6 +186,7 @@ def fit_lppl_row(
         "observations": int(len(window)),
         "tc_predicted": tc_date.strftime("%Y-%m-%d"),
         "tc_days_after_t2": int((tc_date - actual_t2).days),
+        "global_tc_upper_date": global_tc_upper_date.strftime("%Y-%m-%d"),
         "check_pass": bool(check_pass),
         "RMSE": float(rmse),
         "A": float(A),
@@ -222,7 +229,12 @@ def run_lppl_event(
         dt_step=dt_step,
     )
 
-    # Start fresh each run.
+    if windows.empty:
+        raise ValueError("No valid windows generated.")
+
+    latest_t2 = pd.to_datetime(windows["t2"]).max()
+    global_tc_upper_date = latest_t2 + pd.Timedelta(days=tc_max_days)
+
     if os.path.exists(output_csv):
         os.remove(output_csv)
 
@@ -232,10 +244,10 @@ def run_lppl_event(
                 df=df,
                 t1=row["t1"],
                 t2=row["t2"],
+                global_tc_upper_date=global_tc_upper_date,
                 date_col=date_col,
                 y_col=y_col,
                 tc_min_days=tc_min_days,
-                tc_max_days=tc_max_days,
                 seed=seed,
             )
 
@@ -264,6 +276,7 @@ def run_lppl_event(
                 "t1": row["t1"],
                 "t2": row["t2"],
                 "dt": row["dt"],
+                "global_tc_upper_date": global_tc_upper_date.strftime("%Y-%m-%d"),
                 "error": str(e),
             }])
 
@@ -281,15 +294,14 @@ def run_lppl_event(
     return pd.read_csv(output_csv)
 
 
-# Example run
 prices = load_prices("eurostoxx600_prices.csv")
 
 results = run_lppl_event(
     df=prices,
     tc_true="2007-06-01",
     output_csv="lppl_results_gfc_2007.csv",
-    t2_step=20,
-    dt_step=50,
+    t2_step=5,
+    dt_step=10,
     tc_min_days=1,
     tc_max_days=500,
 )
