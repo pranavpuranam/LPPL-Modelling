@@ -14,7 +14,7 @@ INDEX_NAME = "STOXX Europe 600"
 END_DATE = "2007-01-01"     # yyyy-mm-dd
 WINDOW_SIZE = 450           # number of trading observations, must be >= 30
 
-CONTEXT_DAYS = 25           # calendar days shown before window and after estimated tc
+CONTEXT_DAYS = 200           # calendar days shown before window and after estimated tc
 
 TC_MIN_DAYS = 1             # minimum tc after END_DATE, calendar days
 TC_MAX_DAYS = 180           # maximum tc after END_DATE, calendar days
