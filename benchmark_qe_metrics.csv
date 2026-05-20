@@ -1,0 +1,2 @@
+model,event,input_csv,tc_true,n_fits,mean_tc_error_days,median_tc_error_days,mae_tc_error_days,std_tc_error_days,hit_rate_within_30_days_pct,hit_rate_within_60_days_pct,hit_rate_within_90_days_pct,benchmark_type,lower_bound,upper_bound,kde_peak_error_days,kde_peak_tc_date
+Random Benchmark,QE,benchmark_qe.csv,2015-04-15,2268,91.66798941798942,92.0,150.87433862433863,155.93700587015687,11.11111111111111,22.001763668430335,32.62786596119929,random_uniform,2014-10-18,2016-04-09,78.89989989989994,2015-07-02

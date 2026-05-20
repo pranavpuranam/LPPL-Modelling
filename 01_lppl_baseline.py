@@ -298,8 +298,8 @@ prices = load_prices("eurostoxx600_prices.csv")
 
 results = run_lppl_event(
     df=prices,
-    tc_true="2007-06-01",
-    output_csv="lppl_results_gfc_2007.csv",
+    tc_true="2022-01-05",
+    output_csv="baseline_covid.csv",
     t2_step=5,
     dt_step=10,
     tc_min_days=1,
