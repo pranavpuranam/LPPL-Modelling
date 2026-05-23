@@ -1,2 +1,0 @@
-model,event,input_csv,tc_true,n_fits,mean_tc_error_days,median_tc_error_days,mae_tc_error_days,std_tc_error_days,hit_rate_within_30_days_pct,hit_rate_within_60_days_pct,hit_rate_within_90_days_pct,benchmark_type,lower_bound,upper_bound,kde_peak_error_days,kde_peak_tc_date
-Random Benchmark,GFC,benchmark_gfc.csv,2007-06-01,2072,91.13368725868726,92.0,150.92519305019306,156.0971635417489,11.003861003861005,21.62162162162162,32.432432432432435,random_uniform,2006-12-04,2008-05-26,82.67667667667672,2007-08-22

@@ -1,2 +1,0 @@
-model,event,input_csv,tc_true,n_fits,mean_tc_error_days,median_tc_error_days,mae_tc_error_days,std_tc_error_days,hit_rate_within_30_days_pct,hit_rate_within_60_days_pct,hit_rate_within_90_days_pct,benchmark_type,lower_bound,upper_bound,kde_peak_error_days,kde_peak_tc_date
-Random Benchmark,COVID,benchmark_covid.csv,2022-01-05,2268,91.66798941798942,92.0,150.87433862433863,155.93700587015687,11.11111111111111,22.001763668430335,32.62786596119929,random_uniform,2021-07-10,2022-12-31,78.89989989989994,2022-03-24

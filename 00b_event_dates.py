@@ -6,7 +6,7 @@ def plot_eurostoxx_history(
     csv_file="eurostoxx600_prices.csv",
     output_file="eurostoxx600_price_history.png",
     resample_freq="W",
-    line_color="#002147"
+    line_color="#0000ce"
 ):
     df = pd.read_csv(csv_file)
 
@@ -34,7 +34,7 @@ def plot_eurostoxx_history(
     plt.rcParams["font.family"] = "Arial"
     plt.rcParams["font.size"] = 14
 
-    plt.figure(figsize=(9, 6))  # 3:2 aspect ratio
+    plt.figure(figsize=(8, 5))  # 3:2 aspect ratio
 
     plt.plot(
         plot_df.index,
@@ -68,4 +68,4 @@ def plot_eurostoxx_history(
     print(f"Figure saved as: {output_file}")
 
 
-plot_eurostoxx_history(line_color="#000000")
+plot_eurostoxx_history(line_color="#0000ce")
