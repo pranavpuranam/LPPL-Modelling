@@ -4,19 +4,19 @@ import matplotlib.dates as mdates
 
 
 # ============================================================
-# SETTINGS — COARSE T2 STEP 5 FULL-SCALE POSITIVE CONFIDENCE
+# SETTINGS — T2 STEP 5 SHU-LONG POSITIVE CONFIDENCE
 # ============================================================
 
 PRICE_CSV = "eurostoxx600_prices.csv"
 
-CONFIDENCE_CSV = "eurostoxx600_lppls_t2step4_shu_short_positive_confidence.csv"
-OUTPUT_PNG = "eurostoxx600_lppls_t2step4_shu_short_positive_price_confidence.png"
+CONFIDENCE_CSV = "eurostoxx600_lppls_t2step5_shu_long_positive_confidence.csv"
+OUTPUT_PNG = "eurostoxx600_lppls_t2step5_shu_long_positive_price_confidence.png"
 
 PRICE_DATE_COL = "Date"
 PRICE_COL = "Close"
 
 CONF_DATE_COL = "t2"
-CONF_COL = "bubble_confidence"
+CONF_COL = "positive_bubble_confidence"
 
 SMOOTH_PRICE = True
 SMOOTH_CONFIDENCE = True
