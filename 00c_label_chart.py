@@ -21,9 +21,13 @@ DRAWDOWN_COLOR = "#0000ce"
 GSADF_COLOR = "green"
 
 PRICE_LINEWIDTH = 1.2
-FIGSIZE = (12, 8)
+FIGSIZE = (12, 6)
 
-OFFSET_STEP_FRACTION = 0.03
+# Blue square starts more clearly above the price
+BASE_OFFSET_FRACTION = 0.06
+
+# Keep spacing between square, circle, triangle the same
+OFFSET_STEP_FRACTION = 0.045
 
 LITERATURE_DATES = [
     "2007-06-01",
@@ -74,10 +78,6 @@ def apply_smoothing(prices):
 
 
 def mark_nearest_tc_dates(prices, event_dates, col_name):
-    """
-    Adds a binary 0/1 tc indicator.
-    If the event date is not a trading day, the nearest trading date is marked.
-    """
     event_df = pd.DataFrame({"event_date": pd.to_datetime(event_dates)})
     trading_dates = prices[[DATE_COL]].sort_values(DATE_COL)
 
@@ -125,10 +125,6 @@ def add_tc_indicators(prices):
 
 
 def save_updated_price_file(prices):
-    """
-    Overwrites the existing price CSV with the original useful columns
-    plus the three tc indicator columns. Does not save price_plot.
-    """
     save_cols = [DATE_COL, PRICE_COL]
 
     if "log_price" in prices.columns:
@@ -157,15 +153,17 @@ def get_event_points(prices, event_dates, event_name="Event Date"):
 
 def add_vertical_offsets(prices, drawdown_points, gsadf_points, lit_points):
     price_range = prices[PRICE_COL].max() - prices[PRICE_COL].min()
+
+    base_offset = BASE_OFFSET_FRACTION * price_range
     offset_step = OFFSET_STEP_FRACTION * price_range
 
     drawdown_points = drawdown_points.copy()
     gsadf_points = gsadf_points.copy()
     lit_points = lit_points.copy()
 
-    drawdown_points["y_plot"] = drawdown_points["price_plot"] + offset_step
-    gsadf_points["y_plot"] = gsadf_points["price_plot"] + 2 * offset_step
-    lit_points["y_plot"] = lit_points["price_plot"] + 3 * offset_step
+    drawdown_points["y_plot"] = drawdown_points["price_plot"] + base_offset
+    gsadf_points["y_plot"] = gsadf_points["price_plot"] + base_offset + offset_step
+    lit_points["y_plot"] = lit_points["price_plot"] + base_offset + 2 * offset_step
 
     return drawdown_points, gsadf_points, lit_points
 
@@ -238,7 +236,7 @@ def make_plot(prices, lit_points, drawdown_points, gsadf_points):
     price_range = raw_price_max - raw_price_min
 
     y_min = raw_price_min - 0.05 * price_range
-    y_max = raw_price_max + 0.12 * price_range
+    y_max = raw_price_max + 0.18 * price_range
 
     ax.set_ylim(y_min, y_max)
 
