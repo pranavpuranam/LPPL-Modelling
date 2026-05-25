@@ -4,19 +4,19 @@ import matplotlib.dates as mdates
 
 
 # ============================================================
-# SETTINGS — COARSE T2 STEP 5 FULL-SCALE POSITIVE CONFIDENCE
+# SETTINGS — DAILY FULLSCALE POSITIVE CONFIDENCE
 # ============================================================
 
 PRICE_CSV = "eurostoxx600_prices.csv"
 
-CONFIDENCE_CSV = "eurostoxx600_lppls_t2step4_shu_short_positive_confidence.csv"
-OUTPUT_PNG = "eurostoxx600_lppls_t2step4_shu_short_positive_price_confidence.png"
+CONFIDENCE_CSV = "daily_fullscale/eurostoxx600_lppls_daily_fullscale_positive_confidence.csv"
+OUTPUT_PNG = "daily_fullscale/eurostoxx600_lppls_daily_fullscale_positive_price_confidence_gridlines.png"
 
 PRICE_DATE_COL = "Date"
 PRICE_COL = "Close"
 
 CONF_DATE_COL = "t2"
-CONF_COL = "bubble_confidence"
+CONF_COL = "positive_bubble_confidence"
 
 SMOOTH_PRICE = True
 SMOOTH_CONFIDENCE = True
@@ -33,10 +33,6 @@ CONF_LINEWIDTH = 1.4
 FIGSIZE = (12, 8)
 
 
-# ============================================================
-# LOAD DATA
-# ============================================================
-
 def load_data():
     prices = pd.read_csv(PRICE_CSV)
     conf = pd.read_csv(CONFIDENCE_CSV)
@@ -47,53 +43,28 @@ def load_data():
     conf[CONF_DATE_COL] = pd.to_datetime(conf[CONF_DATE_COL], errors="coerce")
     conf[CONF_COL] = pd.to_numeric(conf[CONF_COL], errors="coerce")
 
-    prices = (
-        prices.dropna(subset=[PRICE_DATE_COL, PRICE_COL])
-        .sort_values(PRICE_DATE_COL)
-        .reset_index(drop=True)
-    )
-
-    conf = (
-        conf.dropna(subset=[CONF_DATE_COL, CONF_COL])
-        .sort_values(CONF_DATE_COL)
-        .reset_index(drop=True)
-    )
+    prices = prices.dropna(subset=[PRICE_DATE_COL, PRICE_COL]).sort_values(PRICE_DATE_COL).reset_index(drop=True)
+    conf = conf.dropna(subset=[CONF_DATE_COL, CONF_COL]).sort_values(CONF_DATE_COL).reset_index(drop=True)
 
     return prices, conf
 
-
-# ============================================================
-# TRIM TO CONFIDENCE DATE RANGE
-# ============================================================
 
 def trim_to_confidence_range(prices, conf):
     start_date = conf[CONF_DATE_COL].min()
     end_date = conf[CONF_DATE_COL].max()
 
-    prices_trimmed = (
-        prices[
-            (prices[PRICE_DATE_COL] >= start_date) &
-            (prices[PRICE_DATE_COL] <= end_date)
-        ]
-        .copy()
-        .reset_index(drop=True)
-    )
+    prices = prices[
+        (prices[PRICE_DATE_COL] >= start_date) &
+        (prices[PRICE_DATE_COL] <= end_date)
+    ].copy().reset_index(drop=True)
 
-    conf_trimmed = (
-        conf[
-            (conf[CONF_DATE_COL] >= start_date) &
-            (conf[CONF_DATE_COL] <= end_date)
-        ]
-        .copy()
-        .reset_index(drop=True)
-    )
+    conf = conf[
+        (conf[CONF_DATE_COL] >= start_date) &
+        (conf[CONF_DATE_COL] <= end_date)
+    ].copy().reset_index(drop=True)
 
-    return prices_trimmed, conf_trimmed, start_date, end_date
+    return prices, conf, start_date, end_date
 
-
-# ============================================================
-# INTERPOLATE CONFIDENCE ONTO PRICE DATE GRID
-# ============================================================
 
 def interpolate_confidence_to_price_dates(prices, conf):
     conf2 = conf[[CONF_DATE_COL, CONF_COL]].rename(columns={CONF_DATE_COL: "Date"})
@@ -105,46 +76,27 @@ def interpolate_confidence_to_price_dates(prices, conf):
         .reset_index(drop=True)
     )
 
-    merged[CONF_COL] = merged[CONF_COL].interpolate(
-        method="linear",
-        limit_direction="both"
-    )
+    merged[CONF_COL] = merged[CONF_COL].interpolate(method="linear", limit_direction="both")
 
     return merged.rename(columns={"Date": PRICE_DATE_COL})
 
-
-# ============================================================
-# APPLY SMOOTHING
-# ============================================================
 
 def apply_smoothing(prices, conf_interp):
     prices = prices.copy()
     conf_interp = conf_interp.copy()
 
-    if SMOOTH_PRICE:
-        prices["price_plot"] = (
-            prices[PRICE_COL]
-            .rolling(window=PRICE_SMOOTH_WINDOW, min_periods=1)
-            .mean()
-        )
-    else:
-        prices["price_plot"] = prices[PRICE_COL]
+    prices["price_plot"] = (
+        prices[PRICE_COL].rolling(window=PRICE_SMOOTH_WINDOW, min_periods=1).mean()
+        if SMOOTH_PRICE else prices[PRICE_COL]
+    )
 
-    if SMOOTH_CONFIDENCE:
-        conf_interp["conf_plot"] = (
-            conf_interp[CONF_COL]
-            .rolling(window=CONF_SMOOTH_WINDOW, min_periods=1)
-            .mean()
-        )
-    else:
-        conf_interp["conf_plot"] = conf_interp[CONF_COL]
+    conf_interp["conf_plot"] = (
+        conf_interp[CONF_COL].rolling(window=CONF_SMOOTH_WINDOW, min_periods=1).mean()
+        if SMOOTH_CONFIDENCE else conf_interp[CONF_COL]
+    )
 
     return prices, conf_interp
 
-
-# ============================================================
-# PLOT
-# ============================================================
 
 def make_plot(prices, conf_interp, start_date, end_date):
     plt.rcParams.update({
@@ -174,7 +126,6 @@ def make_plot(prices, conf_interp, start_date, end_date):
     ax1.set_ylabel("Price", color="black")
     ax1.tick_params(axis="x", colors="black")
     ax1.tick_params(axis="y", colors="black")
-    ax1.grid(False)
 
     ax2 = ax1.twinx()
 
@@ -190,7 +141,6 @@ def make_plot(prices, conf_interp, start_date, end_date):
     ax2.set_ylabel("Confidence Score", color="black")
     ax2.tick_params(axis="y", colors="black")
     ax2.set_ylim(0, 1)
-    ax2.grid(False)
 
     ax1.xaxis.set_major_locator(mdates.YearLocator(2))
     ax1.xaxis.set_major_formatter(mdates.DateFormatter("%Y"))
@@ -199,6 +149,10 @@ def make_plot(prices, conf_interp, start_date, end_date):
     ax1.margins(x=0)
     ax2.margins(x=0)
 
+    # Major gridlines only
+    ax1.grid(True, which="major", axis="both", alpha=0.3, linewidth=0.8)
+    ax2.grid(False)
+
     lines1, labels1 = ax1.get_legend_handles_labels()
     lines2, labels2 = ax2.get_legend_handles_labels()
 
@@ -206,17 +160,13 @@ def make_plot(prices, conf_interp, start_date, end_date):
         lines1 + lines2,
         labels1 + labels2,
         loc="upper left",
-        frameon=False
+        frameon=False,
     )
 
     plt.tight_layout()
     plt.savefig(OUTPUT_PNG, dpi=300, bbox_inches="tight")
     plt.show()
 
-
-# ============================================================
-# MAIN
-# ============================================================
 
 if __name__ == "__main__":
     prices, conf = load_data()
