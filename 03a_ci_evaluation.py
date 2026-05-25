@@ -11,14 +11,11 @@ CONF_COL = "positive_bubble_confidence"
 DATE_COL_CONF = "t2"
 DATE_COL_PRICE = "Date"
 
-# Change this if your label column has a different name
-EVENT_COL = "tc_literature"   # or "tc_drawdown", "tc_gsadf"
+EVENT_COL = "tc_literature"   # change to tc_gsadf or tc_drawdown if needed
 
-WINDOWS = [5, 15, 30, 45, 60, 90]
+WINDOWS = [3, 4, 5, 15, 30, 45, 60]
 N_PERMUTATIONS = 10000
 RANDOM_SEED = 42
-
-# Exclude random pseudo-events too close to true collapse dates
 EXCLUSION_WINDOW = 90
 
 OUTPUT_PATH = "ci_pre_collapse_permutation_test.csv"
@@ -54,13 +51,9 @@ if len(event_idx) == 0:
 
 
 # =========================
-# HELPER FUNCTIONS
+# HELPERS
 # =========================
 def mean_ci_before(index, window):
-    """
-    Mean confidence score over the previous `window` trading days,
-    excluding the event day itself.
-    """
     start = index - window
     end = index
 
@@ -71,14 +64,7 @@ def mean_ci_before(index, window):
 
 
 def valid_pseudo_event_indices(window):
-    """
-    Candidate pseudo-event dates:
-    - must have enough history for the window
-    - must not be a true event date
-    - must not lie within EXCLUSION_WINDOW trading days of any true event
-    """
     candidates = np.arange(window, len(df))
-
     mask = np.ones(len(candidates), dtype=bool)
 
     for tc in event_idx:
@@ -91,7 +77,6 @@ def valid_pseudo_event_indices(window):
 # PERMUTATION TEST
 # =========================
 rng = np.random.default_rng(RANDOM_SEED)
-
 results = []
 
 for window in WINDOWS:
