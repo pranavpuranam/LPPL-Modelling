@@ -1,0 +1,86 @@
+import pandas as pd
+import matplotlib.pyplot as plt
+
+# =========================
+# CONFIG — tune these values
+# =========================
+INPUT_PATH = "ci_pre_collapse_permutation_test.csv"
+
+FIGSIZE = (12, 6)          # Tune aspect ratio / plot size here
+FONT_FAMILY = "Arial"
+FONT_SIZE = 18
+
+DATA_LINE_COLOR = "black"
+DATA_LINE_WIDTH = 2.5
+MARKER_SIZE = 8
+
+P_VALUE_LINE = 0.05
+P_VALUE_COLOR = "red"
+P_VALUE_LINE_WIDTH = 1.0
+
+
+# =========================
+# LOAD DATA
+# =========================
+df = pd.read_csv(INPUT_PATH)
+df = df.sort_values("window_days_before_tc")
+
+
+# =========================
+# STYLE
+# =========================
+plt.rcParams.update({
+    "font.family": FONT_FAMILY,
+    "font.size": FONT_SIZE,
+    "axes.labelsize": FONT_SIZE,
+    "xtick.labelsize": FONT_SIZE - 2,
+    "ytick.labelsize": FONT_SIZE - 2,
+    "legend.fontsize": FONT_SIZE - 2,
+})
+
+
+# =========================
+# PLOT
+# =========================
+fig, ax = plt.subplots(figsize=FIGSIZE)
+
+ax.plot(
+    df["window_days_before_tc"],
+    df["empirical_p_value"],
+    marker="o",
+    markersize=MARKER_SIZE,
+    linewidth=DATA_LINE_WIDTH,
+    color=DATA_LINE_COLOR
+)
+
+ax.set_xscale("log")
+
+# Show actual window lengths on the log-scaled x-axis
+x_ticks = df["window_days_before_tc"].tolist()
+ax.set_xticks(x_ticks)
+ax.set_xticklabels([str(int(x)) for x in x_ticks])
+
+ax.axhline(
+    P_VALUE_LINE,
+    linestyle="-",
+    linewidth=P_VALUE_LINE_WIDTH,
+    color=P_VALUE_COLOR,
+    label="p = 0.05"
+)
+
+ax.set_xlabel("Days before Collapse Event, Log Scale")
+ax.set_ylabel("Empirical p-value")
+
+# Major gridlines only
+ax.grid(True, which="major", linestyle=":", linewidth=1.0, alpha=0.65)
+ax.grid(False, which="minor")
+
+ax.legend(
+    frameon=True,
+    facecolor="none",
+    edgecolor="none",
+    framealpha=0
+)
+
+plt.tight_layout()
+plt.show()
