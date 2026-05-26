@@ -31,12 +31,12 @@ OMEGA_BOUNDS = (6.0, 13.0)
 SEED = 42
 MAXITER = 5000
 
-LPPL_COLOR = "#0000ce"
-TC_COLOR = "#0000ce"
+LPPL_COLOR = "red"
+TC_COLOR = "red"
 
 # Move tc label left/right in calendar days
 # Negative = left, positive = right
-TC_LABEL_X_OFFSET_DAYS = -90
+TC_LABEL_X_OFFSET_DAYS = -105
 
 # Move tc label vertically as fraction of y-range above bottom
 TC_LABEL_Y_FRAC_FROM_BOTTOM = 0.04
@@ -232,9 +232,9 @@ after_window = plot_df[plot_df["Date"] > actual_end_date]
 # ============================================================
 
 plt.rcParams["font.family"] = "Arial"
-plt.rcParams["font.size"] = 18
+plt.rcParams["font.size"] = 24
 
-fig, ax = plt.subplots(figsize=(12, 5))
+fig, ax = plt.subplots(figsize=(12, 8))
 
 # Observed log price before fitting window
 ax.plot(
@@ -282,8 +282,8 @@ ax.axvline(
 )
 
 # Labels
-ax.set_xlabel("Date", fontsize=18, fontname="Arial")
-ax.set_ylabel("Log Price", fontsize=18, fontname="Arial")
+ax.set_xlabel("Date", fontsize=24, fontname="Arial")
+ax.set_ylabel("Log Price", fontsize=24, fontname="Arial")
 
 # Grid
 ax.minorticks_off()
@@ -293,7 +293,7 @@ ax.grid(True, which="major", linestyle="-", linewidth=0.7, alpha=0.5)
 ax.xaxis.set_major_locator(mdates.YearLocator())
 ax.xaxis.set_major_formatter(mdates.DateFormatter("%Y"))
 
-ax.tick_params(axis="both", labelsize=18)
+ax.tick_params(axis="both", labelsize=24)
 
 # Remove horizontal empty space
 ax.set_xlim(plot_df["Date"].min(), plot_df["Date"].max())
@@ -324,12 +324,12 @@ ax.text(
     color=TC_COLOR,
     ha="center",
     va="bottom",
-    fontsize=18
+    fontsize=24
 )
 
 # Legend with no box
 ax.legend(
-    prop={"family": "Arial", "size": 18},
+    prop={"family": "Arial", "size": 24},
     frameon=False
 )
 
