@@ -1,23 +1,31 @@
 import numpy as np
 import pandas as pd
-import matplotlib.pyplot as plt
 
 # =========================
 # CONFIG
 # =========================
+
 RESULTS_PATH = "daily_fullscale/eurostoxx600_lppls_daily_fullscale_positive_fits.csv"
 PRICE_PATH = "eurostoxx600_prices.csv"
+OUTPUT_PATH = "tc_estimation_combined_30_60_120_180.csv"
 
 EVENT_COL = "tc_literature"   # change to tc_gsadf / tc_drawdown if needed
 DATE_COL = "Date"
 
-LOOKBACK_TRADING_DAYS = 250   # only use fits with t2 in this pre-event window
-HIT_WINDOWS = [15, 30, 60]    # calendar-day error bands
+LOOKBACK_TRADING_DAYS = 250
+HIT_WINDOWS = [30, 60, 120, 180]
+
+N_SIMULATIONS = 20000
+SEED = 42
+
+TC_MIN_AFTER_T2 = 1
+TC_MAX_AFTER_T2 = 500
 
 
 # =========================
 # LOAD DATA
 # =========================
+
 fits = pd.read_csv(RESULTS_PATH)
 prices = pd.read_csv(PRICE_PATH)
 
@@ -45,8 +53,107 @@ if len(events) == 0:
 
 
 # =========================
-# EVALUATE EACH EVENT
+# FUNCTIONS
 # =========================
+
+def bootstrap_bias_test(errors, n_simulations=20000, seed=42):
+    """
+    Bootstrap test for systematic tc prediction bias.
+
+    Signed error = tc_predicted - true_event_date.
+    Positive values mean tc_predicted is late.
+    """
+
+    rng = np.random.default_rng(seed)
+    errors = np.asarray(errors)
+    n = len(errors)
+
+    boot_means = np.empty(n_simulations)
+    boot_medians = np.empty(n_simulations)
+
+    for i in range(n_simulations):
+        sample = rng.choice(errors, size=n, replace=True)
+        boot_means[i] = np.mean(sample)
+        boot_medians[i] = np.median(sample)
+
+    mean_ci_low, mean_ci_high = np.percentile(boot_means, [2.5, 97.5])
+    median_ci_low, median_ci_high = np.percentile(boot_medians, [2.5, 97.5])
+
+    return {
+        "mean_bias_ci_low": mean_ci_low,
+        "mean_bias_ci_high": mean_ci_high,
+        "mean_bias_significant": not (mean_ci_low <= 0 <= mean_ci_high),
+
+        "median_bias_ci_low": median_ci_low,
+        "median_bias_ci_high": median_ci_high,
+        "median_bias_significant": not (median_ci_low <= 0 <= median_ci_high),
+    }
+
+
+def random_admissible_tc_test(event_fits_valid, event_date, hit_window, n_simulations=20000, seed=42):
+    """
+    Monte Carlo test for tc timing accuracy.
+
+    Null:
+        For each actual fit ending at t2, random tc is drawn from:
+        [t2 + 1 day, t2 + 500 days]
+
+    Tests:
+        1. Hit rate: observed hit rate within ±hit_window days vs random.
+        2. MAE: observed mean absolute error vs random.
+    """
+
+    rng = np.random.default_rng(seed)
+
+    real_errors = (
+        event_fits_valid["tc_predicted"] - event_date
+    ).dt.days.to_numpy()
+
+    real_abs_errors = np.abs(real_errors)
+
+    real_hit_rate = np.mean(real_abs_errors <= hit_window)
+    real_mae = np.mean(real_abs_errors)
+
+    t2_minus_event = (
+        event_fits_valid["t2"] - event_date
+    ).dt.days.to_numpy()
+
+    random_hit_rates = np.empty(n_simulations)
+    random_maes = np.empty(n_simulations)
+
+    for i in range(n_simulations):
+        random_tc_after_t2 = rng.integers(
+            TC_MIN_AFTER_T2,
+            TC_MAX_AFTER_T2 + 1,
+            size=len(event_fits_valid)
+        )
+
+        random_errors = t2_minus_event + random_tc_after_t2
+        random_abs_errors = np.abs(random_errors)
+
+        random_hit_rates[i] = np.mean(random_abs_errors <= hit_window)
+        random_maes[i] = np.mean(random_abs_errors)
+
+    p_hit = (1 + np.sum(random_hit_rates >= real_hit_rate)) / (n_simulations + 1)
+    p_mae = (1 + np.sum(random_maes <= real_mae)) / (n_simulations + 1)
+
+    return {
+        f"hit_rate_pm_{hit_window}d": real_hit_rate,
+        f"random_hit_rate_pm_{hit_window}d": random_hit_rates.mean(),
+        f"p_hit_pm_{hit_window}d": p_hit,
+        f"hit_pm_{hit_window}d_sig_10pct": p_hit < 0.10,
+
+        f"mae_days_pm_{hit_window}d": real_mae,
+        f"random_mae_days_pm_{hit_window}d": random_maes.mean(),
+        f"p_mae_pm_{hit_window}d": p_mae,
+        f"mae_pm_{hit_window}d_sig_10pct": p_mae < 0.10,
+    }
+
+
+# =========================
+# MAIN LOOP
+# =========================
+
 rows = []
 
 for event_date in events:
@@ -76,17 +183,6 @@ for event_date in events:
     }
 
     if n_valid == 0:
-        for metric in [
-            "mean_tc_error_days",
-            "median_tc_error_days",
-            "median_abs_tc_error_days",
-            "iqr_tc_error_days",
-        ]:
-            row[metric] = np.nan
-
-        for h in HIT_WINDOWS:
-            row[f"hit_rate_pm_{h}d"] = np.nan
-
         rows.append(row)
         continue
 
@@ -94,61 +190,82 @@ for event_date in events:
         event_fits_valid["tc_predicted"] - event_date
     ).dt.days
 
-    errors = event_fits_valid["tc_error_days"]
-    abs_errors = errors.abs()
+    errors = event_fits_valid["tc_error_days"].to_numpy()
+    abs_errors = np.abs(errors)
 
-    q1 = errors.quantile(0.25)
-    q3 = errors.quantile(0.75)
-
+    # Descriptive metrics
     row.update({
-        "mean_tc_error_days": errors.mean(),
-        "median_tc_error_days": errors.median(),
-        "median_abs_tc_error_days": abs_errors.median(),
-        "iqr_tc_error_days": q3 - q1,
+        "mean_tc_error_days": np.mean(errors),
+        "median_tc_error_days": np.median(errors),
+        "median_abs_tc_error_days": np.median(abs_errors),
+        "iqr_tc_error_days": np.percentile(errors, 75) - np.percentile(errors, 25),
     })
 
+    # Descriptive hit rates
     for h in HIT_WINDOWS:
-        row[f"hit_rate_pm_{h}d"] = (abs_errors <= h).mean()
+        row[f"hit_rate_pm_{h}d"] = np.mean(abs_errors <= h)
+
+    # Bootstrap bias tests
+    row.update(
+        bootstrap_bias_test(
+            errors=errors,
+            n_simulations=N_SIMULATIONS,
+            seed=SEED
+        )
+    )
+
+    # Monte Carlo random admissible tc tests
+    for h in HIT_WINDOWS:
+        row.update(
+            random_admissible_tc_test(
+                event_fits_valid=event_fits_valid,
+                event_date=event_date,
+                hit_window=h,
+                n_simulations=N_SIMULATIONS,
+                seed=SEED + h
+            )
+        )
 
     rows.append(row)
 
 
 # =========================
-# DISPLAY TABLE AS PNG
+# SAVE ONE CSV
 # =========================
-metrics = pd.DataFrame(rows)
 
-display_table = metrics.copy()
+results = pd.DataFrame(rows)
+results.to_csv(OUTPUT_PATH, index=False)
 
-for col in display_table.columns:
-    if col.startswith("valid_fit_pct") or col.startswith("hit_rate"):
-        display_table[col] = (100 * display_table[col]).round(2)
+print("\nSaved combined results to:", OUTPUT_PATH)
+print("\nResults:")
+print(results.to_string(index=False))
 
-numeric_cols = display_table.select_dtypes(include=[np.number]).columns
-display_table[numeric_cols] = display_table[numeric_cols].round(2)
+print("\nSignificant hit-rate tests at p < 0.10:")
+for h in HIT_WINDOWS:
+    col = f"p_hit_pm_{h}d"
+    sig = results.loc[results[col] < 0.10, ["event_date", col]]
+    if len(sig):
+        print(f"\n±{h} days")
+        print(sig.to_string(index=False))
 
-display_table = display_table.fillna("").astype(str)
+print("\nSignificant MAE tests at p < 0.10:")
+for h in HIT_WINDOWS:
+    col = f"p_mae_pm_{h}d"
+    sig = results.loc[results[col] < 0.10, ["event_date", col]]
+    if len(sig):
+        print(f"\n±{h} days")
+        print(sig.to_string(index=False))
 
-fig_width = max(12, 1.2 * len(display_table.columns))
-fig_height = max(2, 0.45 * len(display_table) + 1)
+print("\nSignificant mean bias tests:")
+sig_mean = results.loc[
+    results["mean_bias_significant"] == True,
+    ["event_date", "mean_tc_error_days", "mean_bias_ci_low", "mean_bias_ci_high"]
+]
+print(sig_mean.to_string(index=False) if len(sig_mean) else "None")
 
-fig, ax = plt.subplots(figsize=(fig_width, fig_height))
-ax.axis("off")
-
-table = ax.table(
-    cellText=display_table.values,
-    colLabels=display_table.columns,
-    cellLoc="center",
-    loc="center"
-)
-
-table.auto_set_font_size(False)
-table.set_fontsize(8)
-table.scale(1, 1.4)
-
-for (row, col), cell in table.get_celld().items():
-    if row == 0:
-        cell.set_text_props(weight="bold")
-
-plt.tight_layout()
-plt.show()
+print("\nSignificant median bias tests:")
+sig_median = results.loc[
+    results["median_bias_significant"] == True,
+    ["event_date", "median_tc_error_days", "median_bias_ci_low", "median_bias_ci_high"]
+]
+print(sig_median.to_string(index=False) if len(sig_median) else "None")

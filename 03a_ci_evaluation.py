@@ -13,7 +13,7 @@ DATE_COL_PRICE = "Date"
 
 EVENT_COL = "tc_literature"   # change to tc_gsadf or tc_drawdown if needed
 
-WINDOWS = [3, 4, 5, 15, 30, 45, 60]
+WINDOWS = [3, 4, 5, 15, 30, 45, 50, 55, 60]
 N_PERMUTATIONS = 10000
 RANDOM_SEED = 42
 EXCLUSION_WINDOW = 90
