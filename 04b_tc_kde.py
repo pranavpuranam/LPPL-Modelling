@@ -306,7 +306,7 @@ def plot_tc_kde_panels(
         "ytick.labelsize": 18,
     })
 
-    fig, axes = plt.subplots(2, 2, figsize=(13, 13))
+    fig, axes = plt.subplots(2, 2, figsize=(14, 11))
     axes = axes.ravel()
 
     for i, (ax, true_date) in enumerate(zip(axes, event_dates)):
@@ -320,7 +320,7 @@ def plot_tc_kde_panels(
         n_fits = len(subset)
         tc_dates = subset[TC_PRED_COL].dropna()
 
-        ax.set_box_aspect(1)
+        ax.set_box_aspect(0.75)
 
         kde, x_grid, y, x_left, x_right, y_max = get_combined_axis_bounds(subset, tc_dates)
 
