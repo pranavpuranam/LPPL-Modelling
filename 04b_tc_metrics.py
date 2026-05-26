@@ -7,9 +7,9 @@ import pandas as pd
 
 RESULTS_PATH = "daily_fullscale/eurostoxx600_lppls_daily_fullscale_positive_fits.csv"
 PRICE_PATH = "eurostoxx600_prices.csv"
-OUTPUT_PATH = "tc_estimation_combined_30_60_120_180.csv"
+OUTPUT_PATH = "tc_estimation_drawdown.csv"
 
-EVENT_COL = "tc_literature"   # change to tc_gsadf / tc_drawdown if needed
+EVENT_COL = "tc_drawdown"   # change to tc_gsadf / tc_drawdown if needed
 DATE_COL = "Date"
 
 LOOKBACK_TRADING_DAYS = 250

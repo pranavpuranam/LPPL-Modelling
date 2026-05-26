@@ -22,7 +22,7 @@ OUTPUT_DIR = "daily_fullscale"
 # ============================================================
 
 DATE_COL = "Date"
-TC_PRED_COL = "tc_drawdown"
+TC_PRED_COL = "tc_predicted"
 VALID_COL = "positive_lppls_valid"
 T2_COL = "t2"
 TC_UPPER_COL = "global_tc_upper_date"
@@ -36,7 +36,7 @@ RED = "red"
 
 # Moves ONLY the red "true tc" text up/down in each panel
 # Positive = higher, negative = lower
-TRUE_TC_TEXT_Y_OFFSETS = [0.06, 0.06, -0.20, 0.08]
+TRUE_TC_TEXT_Y_OFFSETS = [0.06, 0.06, -0.20, 0.08, 0.16, 0.22]
 
 # KDE support trimming:
 # define "effectively zero" as below this fraction of the KDE peak
@@ -51,6 +51,10 @@ KDE_GRID_POINTS = 2000
 
 # pad around observed tc predictions when searching KDE support
 KDE_SEARCH_PAD_DAYS = 180
+
+# additional visual padding so KDE curve returns to x-axis
+KDE_VISUAL_PAD_FRAC = 0.10
+KDE_VISUAL_PAD_MIN_DAYS = 60
 
 # minimum tc after t2 for "full possible predicted date" axis
 TC_MIN_DAYS = 1
@@ -95,8 +99,19 @@ def load_data():
         .eq("true")
     )
 
-    prices = prices.dropna(subset=[DATE_COL]).sort_values(DATE_COL).reset_index(drop=True)
-    fits = fits.dropna(subset=[T2_COL, TC_PRED_COL]).sort_values(T2_COL).reset_index(drop=True)
+    prices = (
+        prices
+        .dropna(subset=[DATE_COL])
+        .sort_values(DATE_COL)
+        .reset_index(drop=True)
+    )
+
+    fits = (
+        fits
+        .dropna(subset=[T2_COL, TC_PRED_COL])
+        .sort_values(T2_COL)
+        .reset_index(drop=True)
+    )
 
     return prices, fits
 
@@ -123,12 +138,18 @@ def select_events_to_plot(
     prices,
     fits,
     event_col="tc_literature",
-    n_panels=4,
+    n_panels=6,
     lookback_days=500,
     only_valid=True,
-    min_fits=5,
+    min_fits=30,
     exclude_dates=None,
 ):
+    """
+    Select events where the number of valid tc estimates is STRICTLY greater than min_fits.
+
+    With min_fits=30, this means:
+        keep only events with N > 30
+    """
     if exclude_dates is None:
         exclude_dates = []
 
@@ -158,8 +179,11 @@ def select_events_to_plot(
 
         n = len(subset)
 
-        if n < min_fits:
-            skipped.append((true_date, f"too few fits, N={n}"))
+        # STRICT FILTER:
+        # Keep only N > min_fits.
+        # Therefore, with min_fits=30, N=30 is rejected and N=31 is kept.
+        if n <= min_fits:
+            skipped.append((true_date, f"too few fits, N={n}; require N > {min_fits}"))
             continue
 
         selected.append(true_date)
@@ -187,7 +211,7 @@ def get_event_title(true_date):
 def get_full_possible_tc_bounds(
     subset,
     tc_min_days=TC_MIN_DAYS,
-    fallback_tc_max_days=FALLBACK_TC_MAX_DAYS
+    fallback_tc_max_days=FALLBACK_TC_MAX_DAYS,
 ):
     """
     Full possible predicted-date range implied by the included fits:
@@ -250,12 +274,37 @@ def get_combined_axis_bounds(subset, tc_dates):
     Final x-axis = broader of:
     (1) KDE support range
     (2) full possible predicted-date range
+
+    Then rebuild the KDE plotting grid on the final axis range and force
+    the first and last density values to zero so the plotted curve visibly
+    returns to the x-axis.
     """
-    kde, x_grid, y, kde_left, kde_right, y_max = get_kde_support_bounds(tc_dates)
+    kde, _, _, kde_left, kde_right, _ = get_kde_support_bounds(tc_dates)
     possible_left, possible_right = get_full_possible_tc_bounds(subset)
 
     final_left = min(kde_left, possible_left)
     final_right = max(kde_right, possible_right)
+
+    # Add visual padding so the KDE has room to decay toward the x-axis
+    span_days = max((final_right - final_left).days, 1)
+    pad_days = max(
+        int(KDE_VISUAL_PAD_FRAC * span_days),
+        KDE_VISUAL_PAD_MIN_DAYS,
+    )
+
+    final_left = final_left - pd.Timedelta(days=pad_days)
+    final_right = final_right + pd.Timedelta(days=pad_days)
+
+    # Recompute the KDE curve over the final visible axis range
+    x_grid = pd.date_range(final_left, final_right, periods=KDE_GRID_POINTS)
+    x_grid_num = mdates.date2num(x_grid)
+    y = kde(x_grid_num)
+
+    # Force visual contact with the x-axis at both ends of the plotted curve
+    y[0] = 0.0
+    y[-1] = 0.0
+
+    y_max = float(np.max(y))
 
     return kde, x_grid, y, final_left, final_right, y_max
 
@@ -266,11 +315,11 @@ def get_combined_axis_bounds(subset, tc_dates):
 
 def plot_tc_kde_panels(
     event_col="tc_literature",
-    output_png="daily_fullscale/tc_estimation_kde_literature_2x2.png",
-    n_panels=4,
+    output_png="daily_fullscale/tc_estimation_kde_literature_Ngt30_3x2.png",
+    n_panels=6,
     lookback_days=500,
     only_valid=True,
-    min_fits=5,
+    min_fits=30,
     exclude_dates=None,
 ):
     prices, fits = load_data()
@@ -287,11 +336,17 @@ def plot_tc_kde_panels(
     )
 
     if len(event_dates) == 0:
-        raise ValueError("No plottable events found.")
+        raise ValueError(f"No plottable events found with N > {min_fits}.")
 
-    print("\nSelected events:")
+    print(f"\nSelected events with N > {min_fits}:")
     for d in event_dates:
-        print("  ", d.strftime("%Y-%m-%d"), "|", get_event_title(d))
+        subset = get_event_subset(
+            fits=fits,
+            true_date=d,
+            lookback_days=lookback_days,
+            only_valid=only_valid,
+        )
+        print("  ", d.strftime("%Y-%m-%d"), "|", get_event_title(d), "| N =", len(subset))
 
     print("\nSkipped events:")
     for d, reason in skipped:
@@ -299,14 +354,16 @@ def plot_tc_kde_panels(
 
     plt.rcParams.update({
         "font.family": "Arial",
-        "font.size": 18,
-        "axes.labelsize": 18,
-        "axes.titlesize": 18,
-        "xtick.labelsize": 18,
-        "ytick.labelsize": 18,
+        "font.size": 22,
+        "axes.labelsize": 22,
+        "axes.titlesize": 22,
+        "xtick.labelsize": 22,
+        "ytick.labelsize": 22,
     })
 
-    fig, axes = plt.subplots(2, 2, figsize=(14, 11))
+    # Keep 2 rows x 3 columns.
+    # If only 5 events pass N > 30, the sixth panel is blank.
+    fig, axes = plt.subplots(2, 3, figsize=(21, 11))
     axes = axes.ravel()
 
     for i, (ax, true_date) in enumerate(zip(axes, event_dates)):
@@ -322,7 +379,10 @@ def plot_tc_kde_panels(
 
         ax.set_box_aspect(0.75)
 
-        kde, x_grid, y, x_left, x_right, y_max = get_combined_axis_bounds(subset, tc_dates)
+        kde, x_grid, y, x_left, x_right, y_max = get_combined_axis_bounds(
+            subset,
+            tc_dates,
+        )
 
         ax.plot(x_grid, y, color="black", linewidth=1.8)
 
@@ -339,7 +399,6 @@ def plot_tc_kde_panels(
                 clip_on=False,
             )
 
-            # text position only
             label_y = TRUE_TC_TEXT_Y_OFFSETS[i] * y_max
             label_y = max(0.03 * y_max, min(label_y, y_max * 1.08))
 
@@ -352,7 +411,6 @@ def plot_tc_kde_panels(
                 linewidth=2.0,
             )
 
-            # text position only
             label_y = y_true + TRUE_TC_TEXT_Y_OFFSETS[i] * y_max
             label_y = max(0, min(label_y, y_max * 1.08))
 
@@ -374,14 +432,16 @@ def plot_tc_kde_panels(
         ax.set_xlim(x_left, x_right)
         ax.set_ylim(bottom=0)
 
-        # y-axis label only on left column
-        if i in [0, 2]:
+        # Y-axis label only on left column.
+        # In a 2x3 grid, left-column panels are indices 0 and 3.
+        if i in [0, 3]:
             ax.set_ylabel("Density")
         else:
             ax.set_ylabel("")
 
-        # x-axis label only on bottom row
-        if i in [2, 3]:
+        # X-axis label only on bottom row.
+        # In a 2x3 grid, bottom-row panels are indices 3, 4, 5.
+        if i in [3, 4, 5]:
             ax.set_xlabel("Estimated $t_c$")
         else:
             ax.set_xlabel("")
@@ -389,10 +449,13 @@ def plot_tc_kde_panels(
         ax.xaxis.set_major_locator(mdates.YearLocator())
         ax.xaxis.set_major_formatter(mdates.DateFormatter("%Y"))
 
+    # Turn off unused axes.
+    # Example: if five events pass N > 30, panel index 5 is blank.
     for ax in axes[len(event_dates):]:
         ax.axis("off")
 
     plt.tight_layout()
+
     os.makedirs(os.path.dirname(output_png), exist_ok=True)
     plt.savefig(output_png, dpi=300, bbox_inches="tight")
     plt.show()
@@ -408,16 +471,16 @@ if __name__ == "__main__":
 
     EXCLUDE_DATES = [
         # Add dates here if you want to exclude any events manually, e.g.
-        # "2007-06-01",   # Global Financial Crisis
-        # "2020-02-19",   # COVID-19 Pandemic
+        # "2007-06-01",
+        # "2020-02-19",
     ]
 
     plot_tc_kde_panels(
         event_col="tc_literature",
-        output_png="daily_fullscale/tc_estimation_kde_literature_2x2.png",
-        n_panels=4,
+        output_png="daily_fullscale/tc_estimation_kde_literature_Ngt30_3x2.png",
+        n_panels=6,
         lookback_days=500,
         only_valid=True,
-        min_fits=5,
+        min_fits=30,
         exclude_dates=EXCLUDE_DATES,
     )
