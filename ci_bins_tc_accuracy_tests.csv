@@ -1,0 +1,11 @@
+scope,test,statistic,p_value,interpretation,high_ci_hit_rate,low_ci_hit_rate,event_date
+pooled,Kruskal-Wallis abs tc error across CI bins,80.18906085695339,3.865152915476025e-18,tests whether abs error differs across Low/Medium/High CI bins,,,
+pooled,Mann-Whitney High CI abs error < Low CI abs error,410608.0,0.18022364307215233,one-sided; significant means High CI has lower abs tc error than Low CI,,,
+pooled,Hit-rate difference High CI - Low CI ±60d,-0.09500701881898573,,positive means High CI has better hit rate; no p-value here,0.014336917562724014,0.10934393638170974,
+pooled,Hit-rate difference High CI - Low CI ±120d,-0.06221452646130385,,positive means High CI has better hit rate; no p-value here,0.13261648745519714,0.19483101391650098,
+event,Kruskal-Wallis abs tc error across CI bins,11.135795694359826,0.00381849907002705,tests whether abs error differs across CI bins within event,,,2011-02-17
+event,Mann-Whitney High CI abs error < Low CI abs error,3037.5,0.9964235078188788,one-sided; significant means High CI has lower abs tc error than Low CI,,,2011-02-17
+event,Kruskal-Wallis abs tc error across CI bins,744.9585930414395,1.7151294251250046e-162,tests whether abs error differs across CI bins within event,,,2015-07-20
+event,Mann-Whitney High CI abs error < Low CI abs error,41505.0,1.457037432474854e-107,one-sided; significant means High CI has lower abs tc error than Low CI,,,2015-07-20
+event,Kruskal-Wallis abs tc error across CI bins,371.2375721080485,2.436606952982722e-81,tests whether abs error differs across CI bins within event,,,2022-01-05
+event,Mann-Whitney High CI abs error < Low CI abs error,66786.0,1.0,one-sided; significant means High CI has lower abs tc error than Low CI,,,2022-01-05
