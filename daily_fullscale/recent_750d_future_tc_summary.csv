@@ -1,0 +1,2 @@
+latest_t2,lookback_start,lookback_days,n_fits_used,mean_future_tc,median_future_tc,mean_days_from_latest_t2,median_days_from_latest_t2,tc_5pct,tc_25pct,tc_75pct,tc_95pct
+2026-05-15,2024-04-25,750,659,2027-02-25 05:25:35.053110784,2027-03-06,286.2261001517451,295.0,2026-08-27 21:36:00,2026-11-22 12:00:00,2027-06-09,2027-08-04 02:24:00
