@@ -9,7 +9,7 @@ PRICE_CSV = "eurostoxx600_prices.csv"
 LONG_CONFIDENCE_CSV = "daily_fullscale/eurostoxx600_lppls_daily_fullscale_positive_confidence.csv"
 SHU_CONFIDENCE_GLOB = "shu_short/*positive_confidence*.csv"
 
-OUTPUT_PNG = "eurostoxx600_stacked_long_vs_shu_short_confidence.png"
+OUTPUT_PNG = "stacked_lppl_chart.png"
 
 PRICE_DATE_COL = "Date"
 PRICE_COL = "Close"
@@ -30,7 +30,8 @@ CONF_LINEWIDTH = 1.4
 # Tiny lift so the dashed zero-line is visible above the x-axis
 ZERO_VISUAL_OFFSET = 0.004
 
-FIGSIZE = (12, 6.6)
+# Slightly taller version of same chart
+FIGSIZE = (12, 10)
 
 
 def find_file(pattern):
