@@ -1,71 +1,30 @@
-# 03b_tc_estimation.py
+# 04a: plot critical time kde panels
 
-import os
-import pandas as pd
-import numpy as np
-import matplotlib.pyplot as plt
-import matplotlib.dates as mdates
-from scipy.stats import gaussian_kde
+import os  # handle folders
+import pandas as pd  # handle dataframes
+import numpy as np  # numerical operations
+import matplotlib.pyplot as plt  # plot charts
+import matplotlib.dates as mdates  # format date axis
+from scipy.stats import gaussian_kde  # estimate kde density
 
-
-# ============================================================
-# FILE PATHS
-# ============================================================
-
-PRICE_CSV = "eurostoxx600_prices.csv"
-FITS_CSV = "daily_fullscale/eurostoxx600_lppls_daily_fullscale_positive_fits.csv"
-OUTPUT_DIR = "daily_fullscale"
-
-
-# ============================================================
-# COLUMN NAMES
-# ============================================================
-
-DATE_COL = "Date"
-TC_PRED_COL = "tc_predicted"
-VALID_COL = "positive_lppls_valid"
-T2_COL = "t2"
-TC_UPPER_COL = "global_tc_upper_date"
-
-
-# ============================================================
-# STYLE / TUNING
-# ============================================================
-
-RED = "red"
-
-# Moves ONLY the red "true tc" text up/down in each panel
-# Positive = higher, negative = lower
-TRUE_TC_TEXT_Y_OFFSETS = [0.06, 0.06, -0.20, 0.08, 0.16, 0.22]
-
-# KDE support trimming:
-# define "effectively zero" as below this fraction of the KDE peak
-KDE_FADE_THRESHOLD_FRAC = 0.002
-
-# if the true tc lands at or below this fraction of peak KDE density,
-# draw a red dot on the x-axis instead of a vertical line
-TRUE_TC_ZERO_THRESHOLD_FRAC = 0.002
-
-# smoother support detection
-KDE_GRID_POINTS = 2000
-
-# pad around observed tc predictions when searching KDE support
-KDE_SEARCH_PAD_DAYS = 180
-
-# additional visual padding so KDE curve returns to x-axis
-KDE_VISUAL_PAD_FRAC = 0.10
-KDE_VISUAL_PAD_MIN_DAYS = 60
-
-# minimum tc after t2 for "full possible predicted date" axis
-TC_MIN_DAYS = 1
-
-# fallback upper bound if global_tc_upper_date is unavailable
-FALLBACK_TC_MAX_DAYS = 500
-
-
-# ============================================================
-# EVENT LABELS
-# ============================================================
+PRICE_CSV = "eurostoxx600_prices.csv"  # input price data
+FITS_CSV = "daily_fullscale/eurostoxx600_lppls_daily_fullscale_positive_fits.csv"  # input fit data
+OUTPUT_DIR = "daily_fullscale"  # output folder
+DATE_COL = "Date"  # price date column
+TC_PRED_COL = "tc_predicted"  # predicted tc column
+VALID_COL = "positive_lppls_valid"  # validity column
+T2_COL = "t2"  # endpoint column
+TC_UPPER_COL = "global_tc_upper_date"  # tc upper bound column
+RED = "red"  # true tc colour
+TRUE_TC_TEXT_Y_OFFSETS = [0.06, 0.06, -0.20, 0.08, 0.16, 0.22]  # label offsets
+KDE_FADE_THRESHOLD_FRAC = 0.002  # kde support threshold
+TRUE_TC_ZERO_THRESHOLD_FRAC = 0.002  # true tc zero threshold
+KDE_GRID_POINTS = 2000  # kde grid size
+KDE_SEARCH_PAD_DAYS = 180  # kde search padding
+KDE_VISUAL_PAD_FRAC = 0.10  # visual padding fraction
+KDE_VISUAL_PAD_MIN_DAYS = 60  # minimum visual padding
+TC_MIN_DAYS = 1  # minimum tc after t2
+FALLBACK_TC_MAX_DAYS = 500  # fallback tc max
 
 EVENT_LABELS = {
     pd.Timestamp("2007-06-01"): "Global Financial Crisis",
@@ -74,65 +33,45 @@ EVENT_LABELS = {
     pd.Timestamp("2018-01-23"): "Eurozone Equity Correction",
     pd.Timestamp("2020-02-19"): "COVID-19 Pandemic",
     pd.Timestamp("2022-01-05"): "Post-COVID Inflation Scare",
-}
-
-
-# ============================================================
-# DATA LOADING
-# ============================================================
+}  # event name map
 
 def load_data():
-    prices = pd.read_csv(PRICE_CSV)
-    fits = pd.read_csv(FITS_CSV)
-
-    prices[DATE_COL] = pd.to_datetime(prices[DATE_COL], errors="coerce")
-    fits[T2_COL] = pd.to_datetime(fits[T2_COL], errors="coerce")
-    fits[TC_PRED_COL] = pd.to_datetime(fits[TC_PRED_COL], errors="coerce")
-
-    if TC_UPPER_COL in fits.columns:
-        fits[TC_UPPER_COL] = pd.to_datetime(fits[TC_UPPER_COL], errors="coerce")
-
+    prices = pd.read_csv(PRICE_CSV)  # load prices
+    fits = pd.read_csv(FITS_CSV)  # load fits
+    prices[DATE_COL] = pd.to_datetime(prices[DATE_COL], errors="coerce")  # parse price dates
+    fits[T2_COL] = pd.to_datetime(fits[T2_COL], errors="coerce")  # parse endpoints
+    fits[TC_PRED_COL] = pd.to_datetime(fits[TC_PRED_COL], errors="coerce")  # parse predicted tc
+    if TC_UPPER_COL in fits.columns:  # check upper bound column
+        fits[TC_UPPER_COL] = pd.to_datetime(fits[TC_UPPER_COL], errors="coerce")  # parse upper bounds
     fits[VALID_COL] = (
         fits[VALID_COL]
         .astype(str)
         .str.lower()
         .eq("true")
-    )
-
+    )  # convert validity flag
     prices = (
         prices
         .dropna(subset=[DATE_COL])
         .sort_values(DATE_COL)
         .reset_index(drop=True)
-    )
-
+    )  # clean prices
     fits = (
         fits
         .dropna(subset=[T2_COL, TC_PRED_COL])
         .sort_values(T2_COL)
         .reset_index(drop=True)
-    )
-
-    return prices, fits
-
-
-# ============================================================
-# EVENT SUBSETTING
-# ============================================================
+    )  # clean fits
+    return prices, fits  # return datasets
 
 def get_event_subset(fits, true_date, lookback_days=500, only_valid=True):
     subset = fits[
         (fits[T2_COL] >= true_date - pd.Timedelta(days=lookback_days)) &
         (fits[T2_COL] <= true_date)
-    ].copy()
-
-    if only_valid:
-        subset = subset[subset[VALID_COL]]
-
-    subset = subset.dropna(subset=[TC_PRED_COL])
-
-    return subset
-
+    ].copy()  # keep pre-event fits
+    if only_valid:  # check valid-only setting
+        subset = subset[subset[VALID_COL]]  # keep valid fits
+    subset = subset.dropna(subset=[TC_PRED_COL])  # remove missing predictions
+    return subset  # return event subset
 
 def select_events_to_plot(
     prices,
@@ -144,174 +83,101 @@ def select_events_to_plot(
     min_fits=30,
     exclude_dates=None,
 ):
-    """
-    Select events where the number of valid tc estimates is STRICTLY greater than min_fits.
-
-    With min_fits=30, this means:
-        keep only events with N > 30
-    """
-    if exclude_dates is None:
-        exclude_dates = []
-
-    exclude_dates = set(pd.to_datetime(exclude_dates))
-
+    if exclude_dates is None:  # check exclusion list
+        exclude_dates = []  # set empty list
+    exclude_dates = set(pd.to_datetime(exclude_dates))  # convert exclusions
     raw_event_dates = (
         prices.loc[prices[event_col] == 1, DATE_COL]
         .dropna()
         .sort_values()
         .tolist()
-    )
-
-    selected = []
-    skipped = []
-
-    for true_date in raw_event_dates:
-        if true_date in exclude_dates:
-            skipped.append((true_date, "manually excluded"))
-            continue
-
+    )  # get event dates
+    selected = []  # store selected events
+    skipped = []  # store skipped events
+    for true_date in raw_event_dates:  # loop through events
+        if true_date in exclude_dates:  # check manual exclusion
+            skipped.append((true_date, "manually excluded"))  # store exclusion
+            continue  # skip event
         subset = get_event_subset(
             fits=fits,
             true_date=true_date,
             lookback_days=lookback_days,
             only_valid=only_valid,
-        )
-
-        n = len(subset)
-
-        # STRICT FILTER:
-        # Keep only N > min_fits.
-        # Therefore, with min_fits=30, N=30 is rejected and N=31 is kept.
-        if n <= min_fits:
-            skipped.append((true_date, f"too few fits, N={n}; require N > {min_fits}"))
-            continue
-
-        selected.append(true_date)
-
-        if len(selected) == n_panels:
-            break
-
-    return selected, skipped
-
-
-# ============================================================
-# HELPERS
-# ============================================================
+        )  # get event fits
+        n = len(subset)  # count fits
+        if n <= min_fits:  # require enough fits
+            skipped.append((true_date, f"too few fits, N={n}; require N > {min_fits}"))  # store skip reason
+            continue  # skip event
+        selected.append(true_date)  # keep event
+        if len(selected) == n_panels:  # check panel limit
+            break  # stop selection
+    return selected, skipped  # return selected and skipped events
 
 def get_event_title(true_date):
-    true_date = pd.Timestamp(true_date).normalize()
-
-    for dt, label in EVENT_LABELS.items():
-        if pd.Timestamp(dt).normalize() == true_date:
-            return label
-
-    return true_date.strftime("%Y-%m-%d")
-
+    true_date = pd.Timestamp(true_date).normalize()  # normalise date
+    for dt, label in EVENT_LABELS.items():  # loop through labels
+        if pd.Timestamp(dt).normalize() == true_date:  # match date
+            return label  # return event label
+    return true_date.strftime("%Y-%m-%d")  # fallback to date
 
 def get_full_possible_tc_bounds(
     subset,
     tc_min_days=TC_MIN_DAYS,
     fallback_tc_max_days=FALLBACK_TC_MAX_DAYS,
 ):
-    """
-    Full possible predicted-date range implied by the included fits:
-    earliest possible tc = min(t2) + tc_min_days
-    latest possible tc   = max(global_tc_upper_date), or fallback if unavailable
-    """
-    x_min = subset[T2_COL].min() + pd.Timedelta(days=tc_min_days)
-
-    if TC_UPPER_COL in subset.columns and subset[TC_UPPER_COL].notna().any():
-        x_max = subset[TC_UPPER_COL].max()
+    x_min = subset[T2_COL].min() + pd.Timedelta(days=tc_min_days)  # earliest possible tc
+    if TC_UPPER_COL in subset.columns and subset[TC_UPPER_COL].notna().any():  # check upper bounds
+        x_max = subset[TC_UPPER_COL].max()  # latest possible tc
     else:
-        x_max = subset[T2_COL].max() + pd.Timedelta(days=fallback_tc_max_days)
-
-    return x_min, x_max
-
+        x_max = subset[T2_COL].max() + pd.Timedelta(days=fallback_tc_max_days)  # fallback latest tc
+    return x_min, x_max  # return bounds
 
 def get_kde_support_bounds(tc_dates):
-    """
-    Build KDE support bounds based on where density has effectively faded to zero.
-    """
-    x_num = mdates.date2num(tc_dates)
-    kde = gaussian_kde(x_num)
-
-    tc_min = tc_dates.min()
-    tc_max = tc_dates.max()
-
-    search_min = tc_min - pd.Timedelta(days=KDE_SEARCH_PAD_DAYS)
-    search_max = tc_max + pd.Timedelta(days=KDE_SEARCH_PAD_DAYS)
-
-    x_grid = pd.date_range(search_min, search_max, periods=KDE_GRID_POINTS)
-    x_grid_num = mdates.date2num(x_grid)
-    y = kde(x_grid_num)
-
-    y_max = float(np.max(y))
-    threshold = KDE_FADE_THRESHOLD_FRAC * y_max
-
-    mask = y >= threshold
-
-    if mask.any():
-        first_idx = int(np.argmax(mask))
-        last_idx = int(len(mask) - 1 - np.argmax(mask[::-1]))
-
-        x_left = x_grid[first_idx]
-        x_right = x_grid[last_idx]
-
-        span_days = max((x_right - x_left).days, 1)
-        margin_days = max(int(0.03 * span_days), 10)
-
-        x_left = x_left - pd.Timedelta(days=margin_days)
-        x_right = x_right + pd.Timedelta(days=margin_days)
+    x_num = mdates.date2num(tc_dates)  # convert dates to numbers
+    kde = gaussian_kde(x_num)  # fit kde
+    tc_min = tc_dates.min()  # earliest predicted tc
+    tc_max = tc_dates.max()  # latest predicted tc
+    search_min = tc_min - pd.Timedelta(days=KDE_SEARCH_PAD_DAYS)  # search lower bound
+    search_max = tc_max + pd.Timedelta(days=KDE_SEARCH_PAD_DAYS)  # search upper bound
+    x_grid = pd.date_range(search_min, search_max, periods=KDE_GRID_POINTS)  # create kde grid
+    x_grid_num = mdates.date2num(x_grid)  # convert grid to numbers
+    y = kde(x_grid_num)  # evaluate kde
+    y_max = float(np.max(y))  # get max density
+    threshold = KDE_FADE_THRESHOLD_FRAC * y_max  # set fade threshold
+    mask = y >= threshold  # find nonzero support
+    if mask.any():  # check support exists
+        first_idx = int(np.argmax(mask))  # first support index
+        last_idx = int(len(mask) - 1 - np.argmax(mask[::-1]))  # last support index
+        x_left = x_grid[first_idx]  # support left
+        x_right = x_grid[last_idx]  # support right
+        span_days = max((x_right - x_left).days, 1)  # support span
+        margin_days = max(int(0.03 * span_days), 10)  # support margin
+        x_left = x_left - pd.Timedelta(days=margin_days)  # pad left
+        x_right = x_right + pd.Timedelta(days=margin_days)  # pad right
     else:
-        x_left = search_min
-        x_right = search_max
-
-    return kde, x_grid, y, x_left, x_right, y_max
-
+        x_left = search_min  # fallback left
+        x_right = search_max  # fallback right
+    return kde, x_grid, y, x_left, x_right, y_max  # return kde support
 
 def get_combined_axis_bounds(subset, tc_dates):
-    """
-    Final x-axis = broader of:
-    (1) KDE support range
-    (2) full possible predicted-date range
-
-    Then rebuild the KDE plotting grid on the final axis range and force
-    the first and last density values to zero so the plotted curve visibly
-    returns to the x-axis.
-    """
-    kde, _, _, kde_left, kde_right, _ = get_kde_support_bounds(tc_dates)
-    possible_left, possible_right = get_full_possible_tc_bounds(subset)
-
-    final_left = min(kde_left, possible_left)
-    final_right = max(kde_right, possible_right)
-
-    # Add visual padding so the KDE has room to decay toward the x-axis
-    span_days = max((final_right - final_left).days, 1)
+    kde, _, _, kde_left, kde_right, _ = get_kde_support_bounds(tc_dates)  # get kde support
+    possible_left, possible_right = get_full_possible_tc_bounds(subset)  # get possible tc range
+    final_left = min(kde_left, possible_left)  # combine left bound
+    final_right = max(kde_right, possible_right)  # combine right bound
+    span_days = max((final_right - final_left).days, 1)  # calculate span
     pad_days = max(
         int(KDE_VISUAL_PAD_FRAC * span_days),
         KDE_VISUAL_PAD_MIN_DAYS,
-    )
-
-    final_left = final_left - pd.Timedelta(days=pad_days)
-    final_right = final_right + pd.Timedelta(days=pad_days)
-
-    # Recompute the KDE curve over the final visible axis range
-    x_grid = pd.date_range(final_left, final_right, periods=KDE_GRID_POINTS)
-    x_grid_num = mdates.date2num(x_grid)
-    y = kde(x_grid_num)
-
-    # Force visual contact with the x-axis at both ends of the plotted curve
-    y[0] = 0.0
-    y[-1] = 0.0
-
-    y_max = float(np.max(y))
-
-    return kde, x_grid, y, final_left, final_right, y_max
-
-
-# ============================================================
-# PLOTTING
-# ============================================================
+    )  # calculate plot padding
+    final_left = final_left - pd.Timedelta(days=pad_days)  # pad left
+    final_right = final_right + pd.Timedelta(days=pad_days)  # pad right
+    x_grid = pd.date_range(final_left, final_right, periods=KDE_GRID_POINTS)  # create final grid
+    x_grid_num = mdates.date2num(x_grid)  # convert grid to numbers
+    y = kde(x_grid_num)  # evaluate kde
+    y[0] = 0.0  # force curve to zero
+    y[-1] = 0.0  # force curve to zero
+    y_max = float(np.max(y))  # get max density
+    return kde, x_grid, y, final_left, final_right, y_max  # return final axis data
 
 def plot_tc_kde_panels(
     event_col="tc_literature",
@@ -322,8 +188,7 @@ def plot_tc_kde_panels(
     min_fits=30,
     exclude_dates=None,
 ):
-    prices, fits = load_data()
-
+    prices, fits = load_data()  # load data
     event_dates, skipped = select_events_to_plot(
         prices=prices,
         fits=fits,
@@ -333,25 +198,21 @@ def plot_tc_kde_panels(
         only_valid=only_valid,
         min_fits=min_fits,
         exclude_dates=exclude_dates,
-    )
-
-    if len(event_dates) == 0:
-        raise ValueError(f"No plottable events found with N > {min_fits}.")
-
-    print(f"\nSelected events with N > {min_fits}:")
-    for d in event_dates:
+    )  # select plottable events
+    if len(event_dates) == 0:  # check selected events
+        raise ValueError(f"No plottable events found with N > {min_fits}.")  # stop if none
+    print(f"\nSelected events with N > {min_fits}:")  # print selected header
+    for d in event_dates:  # loop through selected events
         subset = get_event_subset(
             fits=fits,
             true_date=d,
             lookback_days=lookback_days,
             only_valid=only_valid,
-        )
-        print("  ", d.strftime("%Y-%m-%d"), "|", get_event_title(d), "| N =", len(subset))
-
-    print("\nSkipped events:")
-    for d, reason in skipped:
-        print("  ", d.strftime("%Y-%m-%d"), "|", reason)
-
+        )  # get event subset
+        print("  ", d.strftime("%Y-%m-%d"), "|", get_event_title(d), "| N =", len(subset))  # print event
+    print("\nSkipped events:")  # print skipped header
+    for d, reason in skipped:  # loop through skipped events
+        print("  ", d.strftime("%Y-%m-%d"), "|", reason)  # print skip reason
     plt.rcParams.update({
         "font.family": "Arial",
         "font.size": 22,
@@ -359,37 +220,27 @@ def plot_tc_kde_panels(
         "axes.titlesize": 22,
         "xtick.labelsize": 22,
         "ytick.labelsize": 22,
-    })
-
-    # Keep 2 rows x 3 columns.
-    # If only 5 events pass N > 30, the sixth panel is blank.
-    fig, axes = plt.subplots(2, 3, figsize=(21, 11))
-    axes = axes.ravel()
-
-    for i, (ax, true_date) in enumerate(zip(axes, event_dates)):
+    })  # set plot style
+    fig, axes = plt.subplots(2, 3, figsize=(21, 11))  # create panel grid
+    axes = axes.ravel()  # flatten axes
+    for i, (ax, true_date) in enumerate(zip(axes, event_dates)):  # loop through panels
         subset = get_event_subset(
             fits=fits,
             true_date=true_date,
             lookback_days=lookback_days,
             only_valid=only_valid,
-        )
-
-        n_fits = len(subset)
-        tc_dates = subset[TC_PRED_COL].dropna()
-
-        ax.set_box_aspect(0.75)
-
+        )  # get event subset
+        n_fits = len(subset)  # count fits
+        tc_dates = subset[TC_PRED_COL].dropna()  # get predicted tc dates
+        ax.set_box_aspect(0.75)  # set panel aspect
         kde, x_grid, y, x_left, x_right, y_max = get_combined_axis_bounds(
             subset,
             tc_dates,
-        )
-
-        ax.plot(x_grid, y, color="black", linewidth=1.8)
-
-        y_true = float(kde(mdates.date2num(true_date)))
-        is_true_tc_at_zero = y_true <= TRUE_TC_ZERO_THRESHOLD_FRAC * y_max
-
-        if is_true_tc_at_zero:
+        )  # build kde curve
+        ax.plot(x_grid, y, color="black", linewidth=1.8)  # plot kde
+        y_true = float(kde(mdates.date2num(true_date)))  # get density at true tc
+        is_true_tc_at_zero = y_true <= TRUE_TC_ZERO_THRESHOLD_FRAC * y_max  # check near-zero true density
+        if is_true_tc_at_zero:  # if true tc near zero
             ax.scatter(
                 true_date,
                 0,
@@ -397,11 +248,9 @@ def plot_tc_kde_panels(
                 s=55,
                 zorder=5,
                 clip_on=False,
-            )
-
-            label_y = TRUE_TC_TEXT_Y_OFFSETS[i] * y_max
-            label_y = max(0.03 * y_max, min(label_y, y_max * 1.08))
-
+            )  # mark true tc point
+            label_y = TRUE_TC_TEXT_Y_OFFSETS[i] * y_max  # set label y
+            label_y = max(0.03 * y_max, min(label_y, y_max * 1.08))  # bound label y
         else:
             ax.vlines(
                 true_date,
@@ -409,11 +258,9 @@ def plot_tc_kde_panels(
                 ymax=y_true,
                 color=RED,
                 linewidth=2.0,
-            )
-
-            label_y = y_true + TRUE_TC_TEXT_Y_OFFSETS[i] * y_max
-            label_y = max(0, min(label_y, y_max * 1.08))
-
+            )  # draw true tc line
+            label_y = y_true + TRUE_TC_TEXT_Y_OFFSETS[i] * y_max  # set label y
+            label_y = max(0, min(label_y, y_max * 1.08))  # bound label y
         ax.text(
             true_date,
             label_y,
@@ -423,58 +270,33 @@ def plot_tc_kde_panels(
             ha="right",
             fontsize=18,
             color=RED,
-        )
-
-        event_title = get_event_title(true_date)
-        ax.set_title(f"{event_title} (N={n_fits})")
-
-        ax.grid(True, alpha=0.25)
-        ax.set_xlim(x_left, x_right)
-        ax.set_ylim(bottom=0)
-
-        # Y-axis label only on left column.
-        # In a 2x3 grid, left-column panels are indices 0 and 3.
-        if i in [0, 3]:
-            ax.set_ylabel("Density")
+        )  # add true tc label
+        event_title = get_event_title(true_date)  # get event title
+        ax.set_title(f"{event_title} (N={n_fits})")  # set panel title
+        ax.grid(True, alpha=0.25)  # add grid
+        ax.set_xlim(x_left, x_right)  # set x limits
+        ax.set_ylim(bottom=0)  # set y lower bound
+        if i in [0, 3]:  # check left column
+            ax.set_ylabel("Density")  # set y label
         else:
-            ax.set_ylabel("")
-
-        # X-axis label only on bottom row.
-        # In a 2x3 grid, bottom-row panels are indices 3, 4, 5.
-        if i in [3, 4, 5]:
-            ax.set_xlabel("Estimated $t_c$")
+            ax.set_ylabel("")  # remove y label
+        if i in [3, 4, 5]:  # check bottom row
+            ax.set_xlabel("Estimated $t_c$")  # set x label
         else:
-            ax.set_xlabel("")
-
-        ax.xaxis.set_major_locator(mdates.YearLocator())
-        ax.xaxis.set_major_formatter(mdates.DateFormatter("%Y"))
-
-    # Turn off unused axes.
-    # Example: if five events pass N > 30, panel index 5 is blank.
-    for ax in axes[len(event_dates):]:
-        ax.axis("off")
-
-    plt.tight_layout()
-
-    os.makedirs(os.path.dirname(output_png), exist_ok=True)
-    plt.savefig(output_png, dpi=300, bbox_inches="tight")
-    plt.show()
-
-    print(f"\nSaved: {output_png}")
-
-
-# ============================================================
-# MAIN
-# ============================================================
+            ax.set_xlabel("")  # remove x label
+        ax.xaxis.set_major_locator(mdates.YearLocator())  # set yearly ticks
+        ax.xaxis.set_major_formatter(mdates.DateFormatter("%Y"))  # format years
+    for ax in axes[len(event_dates):]:  # loop over unused axes
+        ax.axis("off")  # hide unused panels
+    plt.tight_layout()  # tidy layout
+    os.makedirs(os.path.dirname(output_png), exist_ok=True)  # create output folder
+    plt.savefig(output_png, dpi=300, bbox_inches="tight")  # save plot
+    plt.show()  # show plot
+    print(f"\nSaved: {output_png}")  # print save path
 
 if __name__ == "__main__":
-
     EXCLUDE_DATES = [
-        # Add dates here if you want to exclude any events manually, e.g.
-        # "2007-06-01",
-        # "2020-02-19",
-    ]
-
+    ]  # manually excluded dates
     plot_tc_kde_panels(
         event_col="tc_literature",
         output_png="daily_fullscale/tc_estimation_kde_literature_Ngt30_3x2.png",
@@ -483,4 +305,4 @@ if __name__ == "__main__":
         only_valid=True,
         min_fits=30,
         exclude_dates=EXCLUDE_DATES,
-    )
+    )  # plot kde panels

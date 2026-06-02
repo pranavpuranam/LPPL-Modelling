@@ -1,53 +1,45 @@
-# pip install yfinance pandas numpy
+# 00a: clean eurostoxx data
 
-import yfinance as yf
-import pandas as pd
-import numpy as np
+import yfinance as yf  # download market data
+import pandas as pd  # handle dataframes
+import numpy as np  # numerical operations
 
-ticker = "^STOXX"  # EURO STOXX 50 Index
+ticker = "^STOXX"  # stoxx europe 600 ticker
 
 df = yf.download(
     ticker,
-    start="1986-01-01",   # yfinance will return from earliest available date
+    start="1986-01-01",
     end=None,
     interval="1d",
     auto_adjust=False,
     progress=False
-)
+)  # download daily price data
 
-# Clean column names if yfinance returns multi-index columns
-if isinstance(df.columns, pd.MultiIndex):
-    df.columns = df.columns.get_level_values(0)
+if isinstance(df.columns, pd.MultiIndex):  # check for multiindex columns
+    df.columns = df.columns.get_level_values(0)  # flatten columns
 
-df = df.reset_index()
+df = df.reset_index()  # move date from index to column
 
-# Keep only Date and Close
-df = df[["Date", "Close"]].copy()
+df = df[["Date", "Close"]].copy()  # keep required columns
 
-# Clean types
-df["Date"] = pd.to_datetime(df["Date"])
-df["Close"] = pd.to_numeric(df["Close"], errors="coerce")
+df["Date"] = pd.to_datetime(df["Date"])  # parse dates
+df["Close"] = pd.to_numeric(df["Close"], errors="coerce")  # force numeric prices
 
-# Basic data quality checks
-print("Initial rows:", len(df))
-print("Missing Close values:", df["Close"].isna().sum())
-print("Duplicate dates:", df["Date"].duplicated().sum())
-print("Non-positive Close values:", (df["Close"] <= 0).sum())
+print("Initial rows:", len(df))  # print raw row count
+print("Missing Close values:", df["Close"].isna().sum())  # count missing prices
+print("Duplicate dates:", df["Date"].duplicated().sum())  # count duplicate dates
+print("Non-positive Close values:", (df["Close"] <= 0).sum())  # count invalid prices
 
-# Remove invalid rows
-df = df.dropna(subset=["Date", "Close"])
-df = df[df["Close"] > 0]
-df = df.drop_duplicates(subset=["Date"])
-df = df.sort_values("Date").reset_index(drop=True)
+df = df.dropna(subset=["Date", "Close"])  # remove missing dates/prices
+df = df[df["Close"] > 0]  # remove non-positive prices
+df = df.drop_duplicates(subset=["Date"])  # remove duplicate dates
+df = df.sort_values("Date").reset_index(drop=True)  # sort chronologically
 
-# Add LPPL variable
-df["log_price"] = np.log(df["Close"])
+df["log_price"] = np.log(df["Close"])  # calculate log price
 
-# Final checks
-print("\nFinal rows:", len(df))
-print("Date range:", df["Date"].min().date(), "to", df["Date"].max().date())
-print("Missing values after cleaning:")
-print(df.isna().sum())
+print("\nFinal rows:", len(df))  # print cleaned row count
+print("Date range:", df["Date"].min().date(), "to", df["Date"].max().date())  # print sample range
+print("Missing values after cleaning:")  # print missing value header
+print(df.isna().sum())  # count final missing values
 
-# Save
-df.to_csv("eurostoxx600_prices.csv", index=False)
+df.to_csv("eurostoxx600_prices.csv", index=False)  # save cleaned dataset
