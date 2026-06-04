@@ -1,67 +1,60 @@
-import pandas as pd
-import matplotlib.pyplot as plt
+# 02c_summary_and_michigan_plot.py
 
-# -----------------------
-# 1) Import
-# -----------------------
+import pandas as pd  # handle dataframes
+import matplotlib.pyplot as plt  # plot charts
 
-build = pd.read_csv("C:/Users/Pranav/OneDrive/Desktop/GITHUB/Final-Year-Project/build.csv", parse_dates=["date"])
+build = pd.read_csv(
+    "C:/Users/Pranav/OneDrive/Desktop/GITHUB/Final-Year-Project/build.csv",
+    parse_dates=["date"]
+)  # load final build dataset
 
-# -----------------------
-# 2) Summary Statistics
-# -----------------------
+cols_exclude = ["date", "psy_bubble"]  # columns not used in summary stats
+summary = build.drop(columns=cols_exclude).describe().T  # calculate summary statistics
 
-cols_exclude = ["date", "psy_bubble"]
-summary = build.drop(columns=cols_exclude).describe().T
-
-fig, ax = plt.subplots(figsize=(14, 0.4 * len(summary)))
-ax.axis("off")
+fig, ax = plt.subplots(figsize=(14, 0.4 * len(summary)))  # create table figure
+ax.axis("off")  # hide axes
 
 table = ax.table(
     cellText=summary.round(4).values,
     colLabels=summary.columns,
     rowLabels=summary.index,
     loc="center"
-)
+)  # create summary statistics table
 
-table.auto_set_font_size(False)
-table.set_fontsize(8)
-table.scale(1, 1.2)
+table.auto_set_font_size(False)  # disable automatic font sizing
+table.set_fontsize(8)  # set table font size
+table.scale(1, 1.2)  # scale table spacing
 
 plt.savefig(
     "summary_statistics.pdf",
     bbox_inches="tight"
-)
+)  # save summary statistics table
 
-plt.close()
-
-# -----------------------
-# 3) Plot
-# -----------------------
+plt.close()  # close table figure
 
 plt.rcParams.update({
-    "font.family": "Arial",
-    "font.size": 18
-})
+    "font.family": "Arial",  # set font
+    "font.size": 18  # set font size
+})  # update plot style
 
 mask = (build["date"] >= "1990-01-01") & \
-       (build["date"] <= "2025-12-31")
+       (build["date"] <= "2025-12-31")  # define plotting window
 
-df_plot = build.loc[mask]
+df_plot = build.loc[mask]  # filter data for plot
 
-fig, ax = plt.subplots(figsize=(8, 6))
+fig, ax = plt.subplots(figsize=(8, 6))  # create figure
 
 ax.set_xlim(
     pd.Timestamp("1990-01-01"),
     pd.Timestamp("2025-12-31")
-)
+)  # set x axis limits
 
 ax.plot(
     df_plot["date"],
     df_plot["michigan_sentiment"],
     color="#ff0000",
-    label="Gold Spot Price"
-)
+    label="Michigan Sentiment"
+)  # plot michigan sentiment
 
 ax.fill_between(
     df_plot["date"],
@@ -71,11 +64,11 @@ ax.fill_between(
     color="#ababab",
     alpha=0.4,
     label="PSY Bubble"
-)
+)  # shade labelled bubble periods
 
-ax.set_xlabel("Year")
-ax.set_ylabel("Michigan Sentiment")
+ax.set_xlabel("Year")  # set x label
+ax.set_ylabel("Michigan Sentiment")  # set y label
 
-plt.tight_layout()
-plt.savefig("michigan_sentiment.pdf", bbox_inches="tight")
-plt.show()
+plt.tight_layout()  # tidy layout
+plt.savefig("michigan_sentiment.pdf", bbox_inches="tight")  # save plot
+plt.show()  # show plot

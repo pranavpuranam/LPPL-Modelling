@@ -1,109 +1,80 @@
-import pandas as pd
-import numpy as np
-import re
-from pandas.tseries.offsets import MonthEnd
+# 00a_clean_shiller_data.py
 
-# -----------------------
-# PARAMETERS
-# -----------------------
-FILE = "ie_data.xls"
-SHEET = "Data"
-HEADER_ROWS = 8      # rows 0–7 are header text
-DATA_START = 8       # first data row
+import pandas as pd  # handle dataframes
+import numpy as np  # numerical operations
+import re  # clean text with regex
+from pandas.tseries.offsets import MonthEnd  # move dates to month end
 
-# -----------------------
-# 1) READ HEADER BLOCK
-# -----------------------
-hdr = pd.read_excel(FILE, sheet_name=SHEET, header=None, nrows=HEADER_ROWS)
+FILE = "ie_data.xls"  # raw shiller data file
+SHEET = "Data"  # excel sheet name
+HEADER_ROWS = 8  # number of header rows
+DATA_START = 8  # first data row
 
-# Remove values in 2nd and 3rd row of 1st column
-hdr.iat[1, 0] = np.nan
-hdr.iat[2, 0] = np.nan
+hdr = pd.read_excel(FILE, sheet_name=SHEET, header=None, nrows=HEADER_ROWS)  # load header rows
+
+hdr.iat[1, 0] = np.nan  # blank repeated header cell
+hdr.iat[2, 0] = np.nan  # blank repeated header cell
 
 def clean_token(x):
-    if pd.isna(x):
-        return ""
-    s = str(x).strip()
-    s = re.sub(r"\s+", " ", s)
-    return s
+    if pd.isna(x):  # check missing value
+        return ""  # return empty string
+    s = str(x).strip()  # convert to clean string
+    s = re.sub(r"\s+", " ", s)  # collapse spaces
+    return s  # return cleaned token
 
-# Build column names by vertical concatenation
-colnames = []
-for j in range(hdr.shape[1]):
-    parts = [clean_token(hdr.iat[i, j]) for i in range(HEADER_ROWS)]
-    parts = [p for p in parts if p]
-    name = " ".join(parts)
-    name = re.sub(r"\s+", " ", name).strip()
-    colnames.append(name)
+colnames = []  # store column names
+for j in range(hdr.shape[1]):  # loop over columns
+    parts = [clean_token(hdr.iat[i, j]) for i in range(HEADER_ROWS)]  # collect header parts
+    parts = [p for p in parts if p]  # remove empty parts
+    name = " ".join(parts)  # combine header parts
+    name = re.sub(r"\s+", " ", name).strip()  # clean combined name
+    colnames.append(name)  # store column name
 
-keep = [i for i, c in enumerate(colnames) if c]
-colnames = [colnames[i] for i in keep]
+keep = [i for i, c in enumerate(colnames) if c]  # keep named columns only
+colnames = [colnames[i] for i in keep]  # filter column names
 
-# -----------------------
-# 2) READ DATA
-# -----------------------
-df = pd.read_excel(FILE, sheet_name=SHEET, header=None, skiprows=DATA_START)
-df = df.iloc[:, keep]
-df.columns = colnames
+df = pd.read_excel(FILE, sheet_name=SHEET, header=None, skiprows=DATA_START)  # load data rows
+df = df.iloc[:, keep]  # keep named columns only
+df.columns = colnames  # assign cleaned headers
 
-# -----------------------
-# 3) DROP LAST ROW + LAST 3 COLUMNS
-# -----------------------
-df = df.iloc[:-2]        # drop final incomplete row
-df = df.iloc[:, :-3]     # drop forward-looking 10y columns
+df = df.iloc[:-2]  # drop footer rows
+df = df.iloc[:, :-3]  # drop final unused columns
 
-# -----------------------
-# 4) SNAKE_CASE COLUMN NAMES
-# -----------------------
 df.columns = (
     df.columns
-      .str.strip()
-      .str.lower()
-      .str.replace(r"[^\w\s]", "", regex=True)
-      .str.replace(r"\s+", "_", regex=True)
+      .str.strip()  # remove edge spaces
+      .str.lower()  # lowercase column names
+      .str.replace(r"[^\w\s]", "", regex=True)  # remove punctuation
+      .str.replace(r"\s+", "_", regex=True)  # replace spaces with underscores
 )
 
-# -----------------------
-# 5) FIX SHILLER DATE (YYYY.MM)
-# -----------------------
-s = df["date"].astype(str).str.strip()
-parts = s.str.split(".", n=1, expand=True)
+s = df["date"].astype(str).str.strip()  # convert date column to strings
+parts = s.str.split(".", n=1, expand=True)  # split year and month code
 
-year = parts[0].astype(int)
-mstr = parts[1].fillna("").str.strip()
+year = parts[0].astype(int)  # extract year
+mstr = parts[1].fillna("").str.strip()  # extract month string
 
-# Shiller quirk: ".1" = October
 month = pd.to_numeric(
-    mstr.where(mstr.str.len() != 1, "10"),
+    mstr.where(mstr.str.len() != 1, "10"),  # handle october formatting issue
     errors="raise"
-).astype(int)
+).astype(int)  # convert month to integer
 
 df["date"] = (
-    pd.to_datetime(dict(year=year, month=month, day=1))
-    + MonthEnd(0)
+    pd.to_datetime(dict(year=year, month=month, day=1))  # create first-of-month dates
+    + MonthEnd(0)  # move dates to month end
 )
 
-# -----------------------
-# 6) DROP date_fraction COLUMN
-# -----------------------
-df = df.drop(columns=["date_fraction"], errors="ignore")
+df = df.drop(columns=["date_fraction"], errors="ignore")  # remove unused date fraction column
 
-# -----------------------
-# 6b) DROP ROWS WITH ANY MISSING VALUES (AND LOG THEM)
-# -----------------------
+rows_with_na = df[df.isna().any(axis=1)]  # find rows with missing values
 
-rows_with_na = df[df.isna().any(axis=1)]
-
-if not rows_with_na.empty:
-    print("Dropping rows with missing values on these dates:")
-    for d in rows_with_na["date"]:
-        print(f"  - {d.strftime('%Y-%m-%d')}")
+if not rows_with_na.empty:  # check if missing rows exist
+    print("Dropping rows with missing values on these dates:")  # print warning
+    for d in rows_with_na["date"]:  # loop through missing rows
+        print(f"  - {d.strftime('%Y-%m-%d')}")  # print dropped date
 else:
-    print("No rows with missing values found.")
+    print("No rows with missing values found.")  # print clean data message
 
-df = df.dropna(axis=0, how="any")
+df = df.dropna(axis=0, how="any")  # drop rows with missing values
 
-# -----------------------
-# 7) OUTPUT
-# -----------------------
-df.to_csv("shiller_data_clean.csv", index=False)
+df.to_csv("shiller_data_clean.csv", index=False)  # save cleaned shiller data

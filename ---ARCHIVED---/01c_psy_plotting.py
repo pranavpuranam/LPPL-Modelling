@@ -1,70 +1,59 @@
-import pandas as pd
-import numpy as np
-import matplotlib.pyplot as plt
-import matplotlib.dates as mdates
+# 01c_apply_psy_labels.py
 
-# -----------------------
-# 1) Import cleaned Shiller data
-# -----------------------
+import pandas as pd  # handle dataframes
+import numpy as np  # numerical operations
+import matplotlib.pyplot as plt  # plot charts
+import matplotlib.dates as mdates  # format date axis
 
-shiller_classified = pd.read_csv("shiller_data_clean.csv", parse_dates=["date"])
-
-# -----------------------
-# 2) Add bubble indicator
-# -----------------------
+shiller_classified = pd.read_csv("shiller_data_clean.csv", parse_dates=["date"])  # load cleaned shiller data
 
 bubble_dates = pd.read_csv(
     "label_dates.csv",
     parse_dates=["start", "end"]
-)
+)  # load bubble start and end dates
 
-# initialise as NA
-shiller_classified["psy_bubble"] = np.nan
+shiller_classified["psy_bubble"] = np.nan  # create empty bubble label column
 
-# only label inside the target window
 window_mask = (
     (shiller_classified["date"] >= "1990-01-31") &
     (shiller_classified["date"] <= "2025-12-31")
-)
+)  # define labelling window
 
-shiller_classified.loc[window_mask, "psy_bubble"] = 0
+shiller_classified.loc[window_mask, "psy_bubble"] = 0  # set default label to no bubble
 
-# apply bubble labels
-for _, row in bubble_dates.iterrows():
+for _, row in bubble_dates.iterrows():  # loop through bubble date ranges
     mask = (
         window_mask &
         (shiller_classified["date"] >= row["start"]) &
         (shiller_classified["date"] <= row["end"])
-    )
-    shiller_classified.loc[mask, "psy_bubble"] = 1
+    )  # find rows inside this bubble range
+    shiller_classified.loc[mask, "psy_bubble"] = 1  # mark bubble periods
 
-shiller_classified.to_csv("master.csv", index=False)
-
-# -----------------------
-# 3) Plots
-# -----------------------
+shiller_classified.to_csv("master.csv", index=False)  # save labelled master dataset
 
 plt.rcParams.update({
-    "font.family": "Arial",
-    "font.size": 18
-})
+    "font.family": "Arial",  # set font
+    "font.size": 18  # set font size
+})  # update plot style
 
 mask = (shiller_classified["date"] >= "1990-01-01") & \
-       (shiller_classified["date"] <= "2025-12-31")
+       (shiller_classified["date"] <= "2025-12-31")  # define plotting window
 
-df_plot = shiller_classified.loc[mask]
+df_plot = shiller_classified.loc[mask]  # filter data for plot
 
-fig, ax = plt.subplots(figsize=(8, 6))
+fig, ax = plt.subplots(figsize=(8, 6))  # create figure
 
-ax.set_xlim(pd.Timestamp("1990-01-01"),
-            pd.Timestamp("2025-12-31"))
+ax.set_xlim(
+    pd.Timestamp("1990-01-01"),
+    pd.Timestamp("2025-12-31")
+)  # set x axis limits
 
 ax.plot(
     df_plot["date"],
     df_plot["sp_comp_p"],
     color="#ff0000",
     label="S&P 500 Price"
-)
+)  # plot s&p 500 price
 
 ax.fill_between(
     df_plot["date"],
@@ -74,11 +63,11 @@ ax.fill_between(
     color="#ababab",
     alpha=0.4,
     label="PSY Bubble"
-)
+)  # shade labelled bubble periods
 
-ax.set_xlabel("Year")
-ax.set_ylabel("Price")
+ax.set_xlabel("Year")  # set x label
+ax.set_ylabel("Price")  # set y label
 
-plt.tight_layout()
-plt.savefig("sp500_price.pdf", bbox_inches="tight")
-plt.show()
+plt.tight_layout()  # tidy layout
+plt.savefig("sp500_price.pdf", bbox_inches="tight")  # save plot
+plt.show()  # show plot

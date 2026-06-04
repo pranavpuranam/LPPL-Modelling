@@ -1,39 +1,32 @@
-import pandas as pd
-import matplotlib.pyplot as plt
-import numpy as np
+# 03d_correlation_heatmap.py
 
-# -----------------------
-# 1) Import
-# -----------------------
+import pandas as pd  # handle dataframes
+import matplotlib.pyplot as plt  # plot charts
+import numpy as np  # numerical operations
+
 build = pd.read_csv(
     "C:/Users/Pranav/OneDrive/Desktop/Final-Year-Project/build.csv",
     parse_dates=["date"]
-)
+)  # load final build dataset
 
-# -----------------------
-# 2) Plot
-# -----------------------
+cols = build.columns.difference(["date", "psy_bubble"])  # select feature columns
+data = build[cols].select_dtypes(include="number")  # keep numeric columns only
 
-cols = build.columns.difference(["date", "psy_bubble"])
-data = build[cols].select_dtypes(include="number")
+corr = data.corr()  # calculate correlation matrix
 
-corr = data.corr()
+plt.rcParams["font.family"] = "Arial"  # set font
 
-plt.rcParams["font.family"] = "Arial"
+fig, ax = plt.subplots(figsize=(12, 10))  # create figure
+cax = ax.imshow(corr, cmap="bwr", vmin=-1, vmax=1)  # plot correlation heatmap
 
-fig, ax = plt.subplots(figsize=(12, 10))
-cax = ax.imshow(corr, cmap="bwr", vmin=-1, vmax=1)
+ax.set_xticks(np.arange(len(corr.columns)))  # set x tick positions
+ax.set_yticks(np.arange(len(corr.columns)))  # set y tick positions
+ax.set_xticklabels(corr.columns, fontsize=9, rotation=90)  # set x tick labels
+ax.set_yticklabels(corr.columns, fontsize=9)  # set y tick labels
 
-# Ticks and labels
-ax.set_xticks(np.arange(len(corr.columns)))
-ax.set_yticks(np.arange(len(corr.columns)))
-ax.set_xticklabels(corr.columns, fontsize=9, rotation=90)
-ax.set_yticklabels(corr.columns, fontsize=9)
+cbar = fig.colorbar(cax, ax=ax)  # add colour bar
+cbar.ax.tick_params(labelsize=9)  # set colour bar tick size
 
-# Colorbar
-cbar = fig.colorbar(cax, ax=ax)
-cbar.ax.tick_params(labelsize=9)
-
-plt.tight_layout()
-plt.savefig("correlation.pdf", bbox_inches="tight")
-plt.show()
+plt.tight_layout()  # tidy layout
+plt.savefig("correlation.pdf", bbox_inches="tight")  # save heatmap
+plt.show()  # show plot
